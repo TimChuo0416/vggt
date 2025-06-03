@@ -84,15 +84,17 @@ def match_vggt(img0_path, img1_path, device):
     images = load_and_preprocess_images([img0_path, img1_path])
     model = VGGT()
     _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-    model.load_state_dict(torch.hub.load_state_dict_from_url(_URL, map_location=device))
-    model = model.to(device).eval()
-    images = images.to(device)[None]
+    model.load_state_dict(
+        torch.hub.load_state_dict_from_url(_URL, map_location=device)
+    )
+    model = model.to(device).half().eval()
+    images = images.to(device).half()[None]
 
     H, W = images.shape[-2:]
     grid_y, grid_x = torch.meshgrid(torch.arange(H, device=device), torch.arange(W, device=device), indexing="ij")
     query = torch.stack([grid_x.reshape(-1), grid_y.reshape(-1)], dim=-1)
 
-    with torch.no_grad():
+    with torch.no_grad(), torch.cuda.amp.autocast():
         agg, ps_idx = model.aggregator(images)
         track, _, _ = model.track_head(agg, images, ps_idx, query_points=query[None])
 
