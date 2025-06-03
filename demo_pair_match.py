@@ -51,8 +51,12 @@ def match_lightglue(img0, img1, device):
         feats1 = sp.extract(t1)
         matches = matcher({"image0": feats0, "image1": feats1})
 
-    mkpts0 = feats0["keypoints"][0, matches["matches"][0, :, 0]].cpu().numpy()
-    mkpts1 = feats1["keypoints"][0, matches["matches"][0, :, 1]].cpu().numpy()
+    # LightGlue returns a dict with a list of matched indices per image pair
+    # matches["matches"][0] has shape [S x 2] for the first (and only) batch
+    mkpts0_idx = matches["matches"][0][:, 0]
+    mkpts1_idx = matches["matches"][0][:, 1]
+    mkpts0 = feats0["keypoints"][0, mkpts0_idx].cpu().numpy()
+    mkpts1 = feats1["keypoints"][0, mkpts1_idx].cpu().numpy()
     return mkpts0, mkpts1
 
 
