@@ -1,6 +1,7 @@
 import argparse
 import cv2
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from lightglue import SuperPoint, LightGlue, viz2d
@@ -121,12 +122,31 @@ def match_roma(img0_path, img1_path, device):
     warp, certainty = model.match(img0_path, img1_path, device=device)
     Ht, W2, _ = warp.shape
     W = W2 // 2
-    grid_y, grid_x = torch.meshgrid(torch.linspace(-1 + 1 / Ht, 1 - 1 / Ht, Ht, device=device),
-                                    torch.linspace(-1 + 1 / W, 1 - 1 / W, W, device=device), indexing="ij")
+    grid_y, grid_x = torch.meshgrid(
+        torch.linspace(-1 + 1 / Ht, 1 - 1 / Ht, Ht, device=device),
+        torch.linspace(-1 + 1 / W, 1 - 1 / W, W, device=device),
+        indexing="ij",
+    )
     grid = torch.stack([grid_x.reshape(-1), grid_y.reshape(-1)], dim=-1)
-    mkpts0 = ((grid + 1) * torch.tensor([(W - 1) / 2, (Ht - 1) / 2], device=device)).cpu().numpy()
-    mkpts1 = warp[:,:W,2:].reshape(-1,2).cpu().numpy()
-    return mkpts0, mkpts1
+    mkpts0 = (
+        (grid + 1)
+        * torch.tensor([(W - 1) / 2, (Ht - 1) / 2], device=device)
+    ).cpu().numpy()
+    mkpts1 = warp[:, :W, 2:].reshape(-1, 2).cpu().numpy()
+    return mkpts0, mkpts1, warp, certainty
+
+
+def warp_image_roma(img, warp, certainty, device):
+    """Warp `img` to the reference frame using RoMa's dense warp."""
+    H, W2, _ = warp.shape
+    W = W2 // 2
+    img_t = tensor_from_image(img)[None].to(device)
+    grid = warp[:, :W, 2:][None]
+    warped = F.grid_sample(img_t, grid, mode="bilinear", align_corners=False)[0]
+    if certainty is not None:
+        c = certainty[:, :W][..., None]
+        warped = c * warped + (1 - c) * torch.ones_like(warped)
+    return warped.permute(1, 2, 0).clamp(0, 1).cpu().numpy()
 
 
 def main(img0_path, img1_path, method="all", output=None):
@@ -151,13 +171,17 @@ def main(img0_path, img1_path, method="all", output=None):
         results["vggt"] = (mkpts0, mkpts1)
 
     if "roma" in methods:
-        mkpts0, mkpts1 = match_roma(img0_path, img1_path, device)
-        results["roma"] = (mkpts0, mkpts1)
+        mkpts0, mkpts1, warp, certainty = match_roma(img0_path, img1_path, device)
+        results["roma"] = (mkpts0, mkpts1, warp, certainty)
 
     img_h, img_w = img0.shape[:2]
-    for name, (k0, k1) in results.items():
-        H, _ = cv2.findHomography(k1, k0, cv2.RANSAC)
-        warped = cv2.warpPerspective(img1, H, (img_w, img_h))
+    for name, vals in results.items():
+        k0, k1 = vals[0], vals[1]
+        if name == "roma" and len(vals) == 4:
+            warped = warp_image_roma(img1, vals[2], vals[3], device)
+        else:
+            H, _ = cv2.findHomography(k1, k0, cv2.RANSAC)
+            warped = cv2.warpPerspective(img1, H, (img_w, img_h))
 
         viz2d.plot_images([img0, img1])
         viz2d.plot_matches(k0, k1)
