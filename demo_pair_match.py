@@ -81,7 +81,7 @@ def match_eloftr(img0, img1, device):
 def match_vggt(img0_path, img1_path, device):
     if VGGT is None:
         raise ImportError("VGGT package not available")
-    images, _ = load_and_preprocess_images([img0_path, img1_path])
+    images = load_and_preprocess_images([img0_path, img1_path])
     model = VGGT()
     _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
     model.load_state_dict(torch.hub.load_state_dict_from_url(_URL, map_location=device))
