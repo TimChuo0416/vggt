@@ -96,7 +96,16 @@ def match_vggt(img0_path, img1_path, device):
 
     with torch.no_grad(), torch.cuda.amp.autocast():
         agg, ps_idx = model.aggregator(images)
-        track, _, _ = model.track_head(agg, images, ps_idx, query_points=query[None])
+
+        # Process query points in smaller batches to reduce memory usage
+        tracks = []
+        chunk = 8192
+        for i in range(0, query.shape[0], chunk):
+            q = query[i:i + chunk]
+            t, _, _ = model.track_head(agg, images, ps_idx, query_points=q[None])
+            tracks.append(t)
+
+        track = torch.cat(tracks, dim=2)
 
     mkpts0 = query.cpu().numpy()
     mkpts1 = track[0, 1].cpu().numpy()
