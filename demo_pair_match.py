@@ -98,21 +98,28 @@ def match_vggt(img0_path, img1_path, device):
     with torch.no_grad(), torch.cuda.amp.autocast():
         agg, ps_idx = model.aggregator(images)
 
-        # Process query points in smaller batches to reduce memory usage
         tracks = []
+        certs = []
         chunk = 8192
         for i in range(0, query.shape[0], chunk):
             q = query[i : i + chunk]
-            t, _, _ = model.track_head(
+            t, vis, conf = model.track_head(
                 agg, images, ps_idx, query_points=q[None]
             )
             tracks.append(t[-1])
+            certs.append(conf[-1] if conf is not None else vis)
 
         track = torch.cat(tracks, dim=2)
+        certainty = torch.cat(certs, dim=2)
 
     mkpts0 = query.cpu().numpy()
     mkpts1 = track[0, 1].cpu().numpy()
-    return mkpts0, mkpts1
+    H, W = images.shape[-2:]
+    grid = track[0, 1].reshape(H, W, 2)
+    grid[..., 0] = (grid[..., 0] + 0.5) / W * 2 - 1
+    grid[..., 1] = (grid[..., 1] + 0.5) / H * 2 - 1
+    cert_map = certainty[0, 1].reshape(H, W)
+    return mkpts0, mkpts1, grid, cert_map
 
 
 def match_roma(img0_path, img1_path, device):
@@ -149,6 +156,16 @@ def warp_image_roma(img, warp, certainty, device):
     return warped.permute(1, 2, 0).clamp(0, 1).cpu().numpy()
 
 
+def warp_image_vggt(img, grid, certainty, device):
+    """Warp `img` to the reference frame using VGGT's dense tracks."""
+    img_t = tensor_from_image(img)[None].to(device)
+    warped = F.grid_sample(img_t, grid[None], mode="bilinear", align_corners=False)[0]
+    if certainty is not None:
+        c = certainty[..., None]
+        warped = c * warped + (1 - c) * torch.ones_like(warped)
+    return warped.permute(1, 2, 0).clamp(0, 1).cpu().numpy()
+
+
 def main(img0_path, img1_path, method="all", output=None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -167,8 +184,8 @@ def main(img0_path, img1_path, method="all", output=None):
         results["efficientloftr"] = (mkpts0, mkpts1)
 
     if "vggt" in methods:
-        mkpts0, mkpts1 = match_vggt(img0_path, img1_path, device)
-        results["vggt"] = (mkpts0, mkpts1)
+        mkpts0, mkpts1, grid, certainty = match_vggt(img0_path, img1_path, device)
+        results["vggt"] = (mkpts0, mkpts1, grid, certainty)
 
     if "roma" in methods:
         mkpts0, mkpts1, warp, certainty = match_roma(img0_path, img1_path, device)
@@ -179,6 +196,8 @@ def main(img0_path, img1_path, method="all", output=None):
         k0, k1 = vals[0], vals[1]
         if name == "roma" and len(vals) == 4:
             warped = warp_image_roma(img1, vals[2], vals[3], device)
+        elif name == "vggt" and len(vals) == 4:
+            warped = warp_image_vggt(img1, vals[2], vals[3], device)
         else:
             H, _ = cv2.findHomography(k1, k0, cv2.RANSAC)
             warped = cv2.warpPerspective(img1, H, (img_w, img_h))
