@@ -167,6 +167,16 @@ Run the following command to run reconstruction and visualize the point clouds i
 python demo_viser.py --image_folder path/to/your/images/folder
 ```
 
+#### Pair Matching Demo
+
+Demonstrates dense warps between two images using VGGT, RoMa and EfficientLoFTR:
+
+```bash
+python demo_pair_match.py image0.jpg image1.jpg --method all
+```
+
+Use `--method` to select a specific matcher: `lightglue`, `vggt`, `roma`, or `efficientloftr`.
+
 ## Exporting to COLMAP Format
 
 We also support exporting VGGT's predictions directly to COLMAP format, by:

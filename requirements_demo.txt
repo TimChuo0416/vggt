@@ -13,4 +13,7 @@ matplotlib
 pycolmap==3.10.0
 pyceres==2.3
 git+https://github.com/jytime/LightGlue.git#egg=lightglue
+git+https://github.com/Parskatt/RoMa.git#egg=romatch
+git+https://github.com/zju3dv/EfficientLoFTR.git#egg=efficientloftr
+roma
 
