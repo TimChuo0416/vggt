@@ -101,9 +101,11 @@ def match_vggt(img0_path, img1_path, device):
         tracks = []
         chunk = 8192
         for i in range(0, query.shape[0], chunk):
-            q = query[i:i + chunk]
-            t, _, _ = model.track_head(agg, images, ps_idx, query_points=q[None])
-            tracks.append(t)
+            q = query[i : i + chunk]
+            t, _, _ = model.track_head(
+                agg, images, ps_idx, query_points=q[None]
+            )
+            tracks.append(t[-1])
 
         track = torch.cat(tracks, dim=2)
 
