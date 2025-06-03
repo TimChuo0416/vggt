@@ -167,6 +167,15 @@ Run the following command to run reconstruction and visualize the point clouds i
 python demo_viser.py --image_folder path/to/your/images/folder
 ```
 
+#### Image Pair Matching
+
+Warp one image to the viewpoint of another using VGGT and compare it to RoMa (if installed).
+The script visualizes pixel-dense correspondences for both methods.
+
+```bash
+python demo_pair_matching.py --image1 path/to/img1.png --image2 path/to/img2.png
+```
+
 ## Exporting to COLMAP Format
 
 We also support exporting VGGT's predictions directly to COLMAP format, by:
